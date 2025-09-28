@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operator Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Poppins', sans-serif; }
+        .sidebar { transition: transform 0.3s ease-in-out; }
+        .sidebar-open { transform: translateX(0); }
+        .sidebar-closed { transform: translateX(-100%); }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        // --- MOCK DATA (Simulating Village Microgrid Database) ---
+        const MOCK_DATA = {
+            operator: { name: 'Ramesh Kumar', village: 'Surajpur Microgrid' },
+            overview: {
+                pvGeneration: 12.7, // kW
+                batterySoC: 82, // %
+                systemUptime: 99.8, // %
+                faultLogs: 3,
+            },
+            pvTrend: {
+                live: { 
+                    labels: Array.from({length: 12}, (_, i) => new Date(Date.now() - (11-i)*5000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit'})), 
+                    data: Array.from({length: 12}, () => (Math.random() * 2 + 12).toFixed(1))
+                },
+                daily: { labels: ['6am', '8am', '10am', '12pm', '2pm', '4pm', '6pm'], data: [1.2, 4.5, 8.9, 14.1, 13.5, 9.2, 3.1] },
+                weekly: { labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'], data: [85, 88, 92, 86, 95, 98, 91] },
+                monthly: { labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'], data: [650, 680, 710, 690] },
+            },
+            loadConsumption: { labels: ['Households', 'Livelihood'], data: [65, 35] },
+            transactions: [
+                { id: 'T01', household: 'Suresh Patel', amount: 200, type: 'Online', date: '2025-09-28' },
+                { id: 'T02', household: 'Anita Devi', amount: 150, type: 'Manual', date: '2025-09-28' },
+                { id: 'T03', household: 'Rakesh Singh', amount: 500, type: 'Online', date: '2025-09-27' },
+                { id: 'T04', household: 'Geeta Kumari', amount: 100, type: 'Online', date: '2025-09-27' },
+                { id: 'T05', household: 'Mohan Lal', amount: 300, type: 'Manual', date: '2025-09-26' },
+            ],
+            financials: { cashCollected: 450, expenses: 1200 },
+            tasks: [
+                { id: 'TSK01', task: 'Panel Cleaning', assigned: 'Self', date: '2025-09-27', status: 'Completed' },
+                { id: 'TSK02', task: 'Battery Health Check', assigned: 'Self', date: '2025-09-28', status: 'Pending' },
+                { id: 'TSK03', task: 'Inverter Reset', assigned: 'Self', date: '2025-09-25', status: 'Completed' },
+            ],
+            complaints: [
+                { id: 'C01', household: 'Suresh Patel', subject: 'Frequent power cuts', date: '2025-09-27', status: 'Pending' },
+                { id: 'C02', household: 'Anita Devi', subject: 'Meter display not working', date: '2025-09-26', status: 'Resolved' },
+                { id: 'C03', household: 'Rakesh Singh', subject: 'Low voltage issue', date: '2025-09-28', status: 'Pending' },
+                { id: 'C04', household: 'Sunita Sharma', subject: 'Billing discrepancy', date: '2025-09-28', status: 'Pending' },
+                { id: 'C05', household: 'Vikram Rathore', subject: 'Unable to recharge online', date: '2025-09-27', status: 'Resolved' },
+            ],
+            households: [ 
+                { id: 'HH01', name: 'Suresh Patel', number: 'A-101'}, { id: 'HH02', name: 'Anita Devi', number: 'A-102' }, 
+                { id: 'HH03', name: 'Rakesh Singh', number: 'B-201'}, { id: 'HH04', name: 'Geeta Kumari', number: 'B-202'}, 
+                { id: 'HH05', name: 'Mohan Lal', number: 'C-301'}, { id: 'HH06', name: 'Sunita Sharma', number: 'C-302'},
+                { id: 'HH07', name: 'Vikram Rathore', number: 'D-401'}, { id: 'HH08', name: 'Priya Verma', number: 'D-402'}
+            ]
+        };
+
+        // --- SVG Icons ---
+        const ICONS = {
+            dashboard: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>,
+            technical: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547a2 2 0 00-.547 1.806l.477 2.387a6 6 0 00.517 3.86l.158.318a6 6 0 00.517 3.86l2.387.477a2 2 0 001.806.547a2 2 0 00.547-1.806l-.477-2.387a6 6 0 00-.517-3.86l-.158-.318a6 6 0 00-.517-3.86l-2.387-.477a2 2 0 00-.547-1.806zM15.428 19.428a2 2 0 00-1.022.547l-2.387.477a6 6 0 00-3.86-.517l-.318-.158a6 6 0 01-3.86-.517L.58 15.95a2 2 0 00-1.806-.547a2 2 0 00-.547 1.806l.477 2.387a6 6 0 00.517 3.86l.158.318a6 6 0 00.517 3.86l2.387.477a2 2 0 001.806.547a2 2 0 00.547-1.806l-.477-2.387a6 6 0 00-.517-3.86l-.158-.318a6 6 0 00-.517-3.86l2.387.477a2 2 0 00.547 1.806zM12 12a2 2 0 11-4 0 2 2 0 014 0z"/></svg>,
+            financial: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>,
+            community: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>,
+            sun: <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>,
+            battery: <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>,
+            uptime: <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
+            fault: <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>,
+            menu: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>,
+            close: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>,
+        };
+
+        // --- Reusable Components ---
+        const Card = ({ children, className = '' }) => <div className={`bg-white rounded-lg shadow-md p-4 sm:p-6 ${className}`}>{children}</div>;
+        const PageTitle = ({ children }) => <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-6">{children}</h1>;
+
+        // --- Chart Components ---
+        const BaseChart = ({ type, data, options, chartView }) => {
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+            useEffect(() => {
+                if (!window.Chart || !chartRef.current) return;
+                const ctx = chartRef.current.getContext('2d');
+                if (chartInstance.current) chartInstance.current.destroy();
+                chartInstance.current = new window.Chart(ctx, { type, data, options });
+                return () => { if (chartInstance.current) chartInstance.current.destroy(); };
+            }, [data, options, type, chartView]);
+            return <div className="h-72 sm:h-80"><canvas ref={chartRef}></canvas></div>;
+        };
+
+        const PVTrendChart = () => {
+            const [view, setView] = useState('live');
+            
+            const getChartData = useCallback(() => {
+                 const data = MOCK_DATA.pvTrend[view];
+                 return {
+                    labels: data.labels,
+                    datasets: [{
+                        label: 'PV Generation (kWh)',
+                        data: data.data,
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: view === 'live' ? 0 : 3,
+                    }]
+                };
+            }, [view]);
+
+            const chartRef = useRef(null);
+            const chartInstance = useRef(null);
+            
+            useEffect(() => {
+                if (!window.Chart || !chartRef.current) return;
+                const ctx = chartRef.current.getContext('2d');
+                if (chartInstance.current) chartInstance.current.destroy();
+                chartInstance.current = new window.Chart(ctx, { type: 'line', data: getChartData() });
+                
+                let intervalId;
+                if (view === 'live') {
+                    intervalId = setInterval(() => {
+                        if (chartInstance.current) {
+                            const chart = chartInstance.current;
+                            const newTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit'});
+                            const newData = (Math.random() * 2 + 12).toFixed(1);
+
+                            chart.data.labels.push(newTime);
+                            chart.data.datasets[0].data.push(newData);
+
+                            if (chart.data.labels.length > 12) {
+                                chart.data.labels.shift();
+                                chart.data.datasets[0].data.shift();
+                            }
+                            chart.update('quiet');
+                        }
+                    }, 5000);
+                }
+
+                return () => { 
+                    clearInterval(intervalId);
+                    if (chartInstance.current) chartInstance.current.destroy(); 
+                };
+            }, [view, getChartData]);
+
+            return (
+                <Card>
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold text-gray-700">PV Generation Trend</h3>
+                        <div className="flex bg-gray-100 p-1 rounded-md">
+                            {['live', 'daily', 'weekly', 'monthly'].map(v => (
+                                <button key={v} onClick={() => setView(v)} className={`px-3 py-1 text-sm rounded ${view === v ? 'bg-white shadow' : ''} capitalize`}>{v}</button>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="h-72 sm:h-80"><canvas ref={chartRef}></canvas></div>
+                </Card>
+            );
+        };
+        
+        const LoadChart = () => {
+            const data = {
+                labels: MOCK_DATA.loadConsumption.labels,
+                datasets: [{
+                    data: MOCK_DATA.loadConsumption.data,
+                    backgroundColor: ['#3b82f6', '#10b981'],
+                    hoverOffset: 4
+                }]
+            };
+            return (
+                <Card>
+                    <h3 className="font-bold text-gray-700 mb-4">Load Consumption</h3>
+                    <BaseChart type="pie" data={data} options={{ maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }}/>
+                </Card>
+            );
+        };
+
+        const PaymentSuccessAnimation = () => {
+            useEffect(() => {
+                const style = document.createElement('style');
+                style.textContent = `
+                    .success-animation-container { position: relative; width: 150px; height: 150px; margin: 0 auto; }
+                    .boom-circle {
+                        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                        background-color: #22c55e; /* green-500 */
+                        border-radius: 50%;
+                        transform: scale(0);
+                        opacity: 0.5;
+                        animation: boom 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+                    }
+                    .checkmark-svg {
+                        width: 100%; height: 100%;
+                        transform: scale(0);
+                        animation: scale-in 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55) 0.3s forwards;
+                    }
+                    .checkmark-circle {
+                        stroke-dasharray: 166; stroke-dashoffset: 166;
+                        animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) 0.5s forwards;
+                    }
+                    .checkmark-check {
+                        transform-origin: 50% 50%;
+                        stroke-dasharray: 48; stroke-dashoffset: 48;
+                        animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 1s forwards;
+                    }
+                    .confetti {
+                        position: absolute; top: 50%; left: 50%;
+                        width: 10px; height: 10px;
+                        background-color: var(--color);
+                        opacity: 0;
+                        animation: confetti-fly 1.2s ease-out 0.5s forwards;
+                    }
+                    @keyframes boom {
+                        0% { transform: scale(0); opacity: 0.8; }
+                        50% { opacity: 0.3; }
+                        100% { transform: scale(2.5); opacity: 0; }
+                    }
+                    @keyframes scale-in {
+                        100% { transform: scale(1); }
+                    }
+                    @keyframes stroke { 100% { stroke-dashoffset: 0; } }
+                    @keyframes confetti-fly {
+                        0% { transform: translate(-50%, -50%) rotate(0) scale(1); opacity: 1; }
+                        100% { transform: translate(var(--x), var(--y)) rotate(360deg) scale(0); opacity: 0; }
+                    }
+                `;
+                document.head.appendChild(style);
+                return () => { if(document.head.contains(style)) document.head.removeChild(style); };
+            }, []);
+
+            const confettiParticles = Array.from({ length: 30 }).map((_, i) => {
+                const angle = Math.random() * 360;
+                const radius = Math.random() * 120 + 50;
+                const x = Math.cos(angle * (Math.PI / 180)) * radius;
+                const y = Math.sin(angle * (Math.PI / 180)) * radius;
+                const colors = ['#f43f5e', '#3b82f6', '#eab308', '#8b5cf6', '#14b8a6'];
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const style = {
+                    '--color': color,
+                    '--x': `${x}px`,
+                    '--y': `${y}px`,
+                };
+                return <div key={i} className="confetti" style={style}></div>;
+            });
+
+            return (
+                <div className="success-animation-container my-4">
+                    <div className="boom-circle"></div>
+                    {confettiParticles}
+                    <svg className="checkmark-svg" viewBox="0 0 52 52">
+                        <circle className="checkmark-circle text-green-500" cx="26" cy="26" r="25" fill="none" strokeWidth="4"/>
+                        <path className="checkmark-check text-white" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" strokeWidth="5"/>
+                    </svg>
+                </div>
+            );
+        };
+
+        // --- Page/View Components ---
+        const DashboardView = () => (
+            <div>
+                <PageTitle>Dashboard</PageTitle>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6">
+                    <StatCard icon={ICONS.sun} title="PV Generation" value={`${MOCK_DATA.overview.pvGeneration} kW`} />
+                    <StatCard icon={ICONS.battery} title="Battery SoC" value={`${MOCK_DATA.overview.batterySoC}%`} />
+                    <StatCard icon={ICONS.uptime} title="System Uptime" value={`${MOCK_DATA.overview.systemUptime}%`} />
+                    <StatCard icon={ICONS.fault} title="Fault Logs" value={MOCK_DATA.overview.faultLogs} />
+                </div>
+                <div className="grid lg:grid-cols-3 gap-6">
+                    <div className="lg:col-span-2"><PVTrendChart /></div>
+                    <div><LoadChart /></div>
+                </div>
+            </div>
+        );
+
+        const StatCard = ({ icon, title, value }) => (
+            <Card className="flex items-center space-x-4">
+                <div>{icon}</div>
+                <div>
+                    <p className="text-gray-500 text-sm">{title}</p>
+                    <p className="font-bold text-xl sm:text-2xl">{value}</p>
+                </div>
+            </Card>
+        );
+        
+        const TechnicalView = () => {
+            const [tasks, setTasks] = useState(MOCK_DATA.tasks);
+            const [newTask, setNewTask] = useState('');
+            const handleAddTask = (e) => {
+                e.preventDefault();
+                if (!newTask) return;
+                const task = {
+                    id: `TSK${Date.now()}`,
+                    task: newTask,
+                    assigned: 'Self',
+                    date: new Date().toISOString().split('T')[0],
+                    status: 'Pending'
+                };
+                setTasks([task, ...tasks]);
+                setNewTask('');
+            };
+
+            return (
+                <div>
+                    <PageTitle>Tasks & Logs</PageTitle>
+                    <Card className="mb-6">
+                        <h3 className="font-bold text-gray-700 mb-4">Add Maintenance Task</h3>
+                        <form onSubmit={handleAddTask} className="flex space-x-2">
+                            <select value={newTask} onChange={e => setNewTask(e.target.value)} className="w-full p-2 border rounded-md bg-gray-50">
+                                <option value="">Select a task...</option>
+                                <option>Panel Cleaning</option>
+                                <option>Battery Check</option>
+                                <option>Inverter Reset</option>
+                                <option>Wiring Inspection</option>
+                            </select>
+                            <button type="submit" className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Add</button>
+                        </form>
+                    </Card>
+                    <Card>
+                        <h3 className="font-bold text-gray-700 mb-4">Past Tasks</h3>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead><tr className="border-b"><th className="p-2">Task</th><th className="p-2">Date</th><th className="p-2">Status</th></tr></thead>
+                                <tbody>
+                                    {tasks.map(t => (
+                                        <tr key={t.id} className="border-b last:border-0">
+                                            <td className="p-2">{t.task}</td>
+                                            <td className="p-2">{t.date}</td>
+                                            <td className="p-2">
+                                                <span className={`px-2 py-1 text-xs rounded-full ${t.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{t.status}</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+                </div>
+            );
+        };
+        
+        const FinancialView = ({ transactions, setTransactions }) => {
+            const [isModalOpen, setModalOpen] = useState(false);
+            const handleManualRecharge = (householdName, amount) => {
+                const newTx = {
+                    id: `T${Date.now()}`,
+                    household: householdName,
+                    amount,
+                    type: 'Manual',
+                    date: new Date().toISOString().split('T')[0],
+                };
+                setTransactions([newTx, ...transactions]);
+            };
+
+            return (
+                <div>
+                    <PageTitle>Financial Monitoring</PageTitle>
+                    <div className="grid md:grid-cols-3 gap-6 mb-6">
+                        <Card className="md:col-span-2 flex justify-between items-center">
+                            <div><p className="text-gray-500">Total Cash Collected</p><p className="font-bold text-2xl text-green-600">₹{MOCK_DATA.financials.cashCollected.toFixed(2)}</p></div>
+                            <div><p className="text-gray-500">Total Expenses</p><p className="font-bold text-2xl text-red-600">₹{MOCK_DATA.financials.expenses.toFixed(2)}</p></div>
+                        </Card>
+                        <button onClick={() => setModalOpen(true)} className="bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition duration-300 flex items-center justify-center text-lg">Recharge Manually</button>
+                    </div>
+                    <Card>
+                        <h3 className="font-bold text-gray-700 mb-4">Village Recharge Records</h3>
+                         <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Household</th><th className="p-2">Amount</th><th className="p-2">Type</th></tr></thead>
+                                <tbody>
+                                    {transactions.map(t => (
+                                        <tr key={t.id} className="border-b last:border-0">
+                                            <td className="p-2">{t.date}</td><td className="p-2">{t.household}</td><td className="p-2 font-semibold">₹{t.amount.toFixed(2)}</td>
+                                            <td className="p-2"><span className={`text-xs px-2 py-1 rounded-full ${t.type === 'Manual' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{t.type}</span></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+                    {isModalOpen && <ManualRechargeModal onClose={() => setModalOpen(false)} onRecharge={handleManualRecharge} />}
+                </div>
+            );
+        };
+        
+        const CommunityView = () => {
+            const [complaints, setComplaints] = useState(MOCK_DATA.complaints);
+            const toggleStatus = (id) => {
+                setComplaints(complaints.map(c => c.id === id ? {...c, status: c.status === 'Pending' ? 'Resolved' : 'Pending'} : c));
+            };
+            return (
+                <div>
+                    <PageTitle>Community Management</PageTitle>
+                    <Card>
+                         <h3 className="font-bold text-gray-700 mb-4">Household Complaints</h3>
+                         <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead><tr className="border-b"><th className="p-2">Date</th><th className="p-2">Household</th><th className="p-2">Subject</th><th className="p-2">Status</th><th className="p-2">Action</th></tr></thead>
+                                <tbody>
+                                    {complaints.map(c => (
+                                        <tr key={c.id} className="border-b last:border-0">
+                                            <td className="p-2">{c.date}</td><td className="p-2">{c.household}</td><td className="p-2">{c.subject}</td>
+                                            <td className="p-2"><span className={`px-2 py-1 text-xs rounded-full ${c.status === 'Resolved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{c.status}</span></td>
+                                            <td className="p-2"><button onClick={() => toggleStatus(c.id)} className="text-blue-600 hover:underline text-sm">Toggle Status</button></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </Card>
+                </div>
+            );
+        };
+
+        const ManualRechargeModal = ({ onClose, onRecharge }) => {
+            const [step, setStep] = useState('details');
+            const [details, setDetails] = useState({ name: '', householdNumber: '', amount: '' });
+            const [timer, setTimer] = useState(300);
+
+            const handleChange = e => setDetails({ ...details, [e.target.name]: e.target.value });
+            const handleSubmit = e => {
+                e.preventDefault();
+                if(details.name && details.householdNumber && details.amount > 0) setStep('qr');
+            };
+
+            useEffect(() => {
+                if (step !== 'qr') return;
+                const countdown = setInterval(() => setTimer(prev => prev > 0 ? prev - 1 : 0), 1000);
+                const paymentTimeout = setTimeout(() => {
+                    onRecharge(details.name, parseFloat(details.amount));
+                    setStep('success');
+                }, 12000); // 12 second payment simulation
+                return () => {
+                    clearInterval(countdown);
+                    clearTimeout(paymentTimeout);
+                };
+            }, [step]);
+            
+            const qrData = encodeURIComponent(`upi://pay?pa=7010686652@pytes&pn=${details.name}&am=${details.amount}&cu=INR`);
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${qrData}`;
+            
+            return (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <Card className="w-full max-w-sm text-center">
+                        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-3xl leading-none">&times;</button>
+                        {step === 'details' && (
+                            <div>
+                                <h3 className="font-bold text-lg mb-4">Manual Recharge</h3>
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <input type="text" name="name" value={details.name} onChange={handleChange} placeholder="Customer Name" required className="w-full p-2 border rounded"/>
+                                    <input type="text" name="householdNumber" value={details.householdNumber} onChange={handleChange} placeholder="Household Number" required className="w-full p-2 border rounded"/>
+                                    <input type="number" name="amount" value={details.amount} onChange={handleChange} placeholder="Enter Amount (₹)" required className="w-full p-2 border rounded"/>
+                                    <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Generate QR Code</button>
+                                </form>
+                            </div>
+                        )}
+                        {step === 'qr' && (
+                            <div className="space-y-3">
+                                <h3 className="font-bold text-lg">Scan to Pay</h3>
+                                <p>For: {details.name} (HH: {details.householdNumber})</p>
+                                <img src={qrUrl} alt="UPI QR Code" className="mx-auto rounded-lg border-4 border-gray-300 my-2" />
+                                <div className="bg-yellow-100 text-yellow-800 font-bold p-2 rounded-lg">
+                                    Expires in: {String(Math.floor(timer / 60)).padStart(2, '0')}:{String(timer % 60).padStart(2, '0')}
+                                </div>
+                                <p className="text-sm text-gray-500 pt-2 animate-pulse">Waiting for payment confirmation...</p>
+                            </div>
+                        )}
+                        {step === 'success' && (
+                            <div className="space-y-2">
+                                <PaymentSuccessAnimation />
+                                <h3 className="font-bold text-xl text-green-600">Recharge Successful!</h3>
+                                <p>₹{details.amount} credited for {details.name}.</p>
+                                <button onClick={onClose} className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 mt-4">Close</button>
+                            </div>
+                        )}
+                    </Card>
+                </div>
+            );
+        };
+
+        // --- Layout Components ---
+        const Sidebar = ({ activeView, setActiveView, isSidebarOpen }) => {
+            const NavItem = ({ view, icon, label }) => (
+                <li onClick={() => setActiveView(view)} className={`flex items-center space-x-3 p-3 my-1 rounded-md cursor-pointer transition-colors ${activeView === view ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}>
+                    {icon}<span>{label}</span>
+                </li>
+            );
+            return (
+                <aside className={`fixed top-0 left-0 h-full w-64 bg-gray-800 text-white p-4 z-40 md:relative md:translate-x-0 sidebar ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+                    <div className="text-center py-4 mb-4">
+                        <h2 className="text-2xl font-bold">Operator</h2>
+                        <p className="text-sm text-gray-400">{MOCK_DATA.operator.village}</p>
+                    </div>
+                    <ul>
+                        <NavItem view="dashboard" icon={ICONS.dashboard} label="Dashboard" />
+                        <NavItem view="technical" icon={ICONS.technical} label="Technical" />
+                        <NavItem view="financial" icon={ICONS.financial} label="Financial" />
+                        <NavItem view="community" icon={ICONS.community} label="Community" />
+                    </ul>
+                </aside>
+            );
+        };
+
+        // --- Main App ---
+        function App() {
+            const [activeView, setActiveView] = useState('dashboard');
+            const [transactions, setTransactions] = useState(MOCK_DATA.transactions);
+            const [isSidebarOpen, setSidebarOpen] = useState(false);
+
+            const renderView = () => {
+                switch(activeView) {
+                    case 'dashboard': return <DashboardView />;
+                    case 'technical': return <TechnicalView />;
+                    case 'financial': return <FinancialView transactions={transactions} setTransactions={setTransactions} />;
+                    case 'community': return <CommunityView />;
+                    default: return <DashboardView />;
+                }
+            };
+
+            return (
+                <div className="flex min-h-screen">
+                    <Sidebar activeView={activeView} setActiveView={setActiveView} isSidebarOpen={isSidebarOpen} />
+                    <div className="flex-1">
+                        <header className="bg-white shadow-sm p-4 flex justify-between items-center md:hidden sticky top-0 z-30">
+                            <h1 className="font-bold text-lg text-blue-600">{MOCK_DATA.operator.village}</h1>
+                            <button onClick={() => setSidebarOpen(!isSidebarOpen)}>{isSidebarOpen ? ICONS.close : ICONS.menu}</button>
+                        </header>
+                        <main className="p-4 sm:p-6">{renderView()}</main>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
+
