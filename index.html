@@ -15,6 +15,24 @@
         .sidebar { transition: transform 0.3s ease-in-out; }
         .sidebar-open { transform: translateX(0); }
         .sidebar-closed { transform: translateX(-100%); }
+        /* Animation for alerts */
+        .alert-enter {
+            opacity: 0;
+            transform: scale(0.9);
+        }
+        .alert-enter-active {
+            opacity: 1;
+            transform: translateX(0);
+            transition: opacity 300ms, transform 300ms;
+        }
+        .alert-exit {
+            opacity: 1;
+        }
+        .alert-exit-active {
+            opacity: 0;
+            transform: scale(0.9);
+            transition: opacity 300ms, transform 300ms;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -32,6 +50,11 @@
                 systemUptime: 99.8, // %
                 faultLogs: 3,
             },
+            alerts: [
+                { id: 'A01', severity: 'Critical', message: 'Grid inverter offline! Immediate attention required.' },
+                { id: 'A02', severity: 'Warning', message: 'Battery temperature exceeding 45°C.' },
+                { id: 'A03', severity: 'Info', message: 'Panel cleaning scheduled for tomorrow.' },
+            ],
             pvTrend: {
                 live: { 
                     labels: Array.from({length: 12}, (_, i) => new Date(Date.now() - (11-i)*5000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit'})), 
@@ -43,6 +66,7 @@
             },
             loadConsumption: { labels: ['Households', 'Livelihood'], data: [65, 35] },
             transactions: [
+                { id: 'T06', household: 'Priya Verma', amount: 250, type: 'Online', date: '2025-09-29' },
                 { id: 'T01', household: 'Suresh Patel', amount: 200, type: 'Online', date: '2025-09-28' },
                 { id: 'T02', household: 'Anita Devi', amount: 150, type: 'Manual', date: '2025-09-28' },
                 { id: 'T03', household: 'Rakesh Singh', amount: 500, type: 'Online', date: '2025-09-27' },
@@ -51,11 +75,13 @@
             ],
             financials: { cashCollected: 450, expenses: 1200 },
             tasks: [
+                { id: 'TSK04', task: 'Wiring Inspection', assigned: 'Self', date: '2025-09-29', status: 'Pending' },
                 { id: 'TSK01', task: 'Panel Cleaning', assigned: 'Self', date: '2025-09-27', status: 'Completed' },
                 { id: 'TSK02', task: 'Battery Health Check', assigned: 'Self', date: '2025-09-28', status: 'Pending' },
                 { id: 'TSK03', task: 'Inverter Reset', assigned: 'Self', date: '2025-09-25', status: 'Completed' },
             ],
             complaints: [
+                 { id: 'C06', household: 'Mohan Lal', subject: 'Smart meter rebooting', date: '2025-09-29', status: 'Pending' },
                 { id: 'C01', household: 'Suresh Patel', subject: 'Frequent power cuts', date: '2025-09-27', status: 'Pending' },
                 { id: 'C02', household: 'Anita Devi', subject: 'Meter display not working', date: '2025-09-26', status: 'Resolved' },
                 { id: 'C03', household: 'Rakesh Singh', subject: 'Low voltage issue', date: '2025-09-28', status: 'Pending' },
@@ -70,16 +96,25 @@
             ]
         };
 
+        // --- Utility Functions ---
+        const formatDate = (dateString) => {
+            const options = { day: '2-digit', month: 'short', year: 'numeric' };
+            return new Date(dateString).toLocaleDateString('en-GB', options);
+        };
+
         // --- SVG Icons ---
         const ICONS = {
             dashboard: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>,
-            technical: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547a2 2 0 00-.547 1.806l.477 2.387a6 6 0 00.517 3.86l.158.318a6 6 0 00.517 3.86l2.387.477a2 2 0 001.806.547a2 2 0 00.547-1.806l-.477-2.387a6 6 0 00-.517-3.86l-.158-.318a6 6 0 00-.517-3.86l-2.387-.477a2 2 0 00-.547-1.806zM15.428 19.428a2 2 0 00-1.022.547l-2.387.477a6 6 0 00-3.86-.517l-.318-.158a6 6 0 01-3.86-.517L.58 15.95a2 2 0 00-1.806-.547a2 2 0 00-.547 1.806l.477 2.387a6 6 0 00.517 3.86l.158.318a6 6 0 00.517 3.86l2.387.477a2 2 0 001.806.547a2 2 0 00.547-1.806l-.477-2.387a6 6 0 00-.517-3.86l-.158-.318a6 6 0 00-.517-3.86l2.387.477a2 2 0 00.547 1.806zM12 12a2 2 0 11-4 0 2 2 0 014 0z"/></svg>,
+            technical: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 16v-2m-6.364-2.364l1.414-1.414M4.222 8.222l1.414 1.414M18.364 15.778l-1.414-1.414M19.778 8.222l-1.414 1.414M12 18a6 6 0 100-12 6 6 0 000 12zM12 14a2 2 0 100-4 2 2 0 000 4z" /></svg>,
             financial: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>,
             community: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>,
             sun: <svg className="w-8 h-8 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>,
-            battery: <svg className="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>,
+            battery: <svg className="w-8 h-8 text-green-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2V5zm3 1a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm-1 4a1 1 0 100 2h12a1 1 0 100-2H5z" clipRule="evenodd" /></svg>,
             uptime: <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
             fault: <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>,
+            alertCritical: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>,
+            alertWarning: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>,
+            alertInfo: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>,
             menu: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>,
             close: <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>,
         };
@@ -106,8 +141,8 @@
             const [view, setView] = useState('live');
             
             const getChartData = useCallback(() => {
-                 const data = MOCK_DATA.pvTrend[view];
-                 return {
+                const data = MOCK_DATA.pvTrend[view];
+                return {
                     labels: data.labels,
                     datasets: [{
                         label: 'PV Generation (kWh)',
@@ -269,21 +304,117 @@
         };
 
         // --- Page/View Components ---
-        const DashboardView = () => (
-            <div>
-                <PageTitle>Dashboard</PageTitle>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6">
-                    <StatCard icon={ICONS.sun} title="PV Generation" value={`${MOCK_DATA.overview.pvGeneration} kW`} />
-                    <StatCard icon={ICONS.battery} title="Battery SoC" value={`${MOCK_DATA.overview.batterySoC}%`} />
-                    <StatCard icon={ICONS.uptime} title="System Uptime" value={`${MOCK_DATA.overview.systemUptime}%`} />
-                    <StatCard icon={ICONS.fault} title="Fault Logs" value={MOCK_DATA.overview.faultLogs} />
+        const DashboardView = () => {
+            const [alerts, setAlerts] = useState(MOCK_DATA.alerts);
+            const [popupAlertIndex, setPopupAlertIndex] = useState(0);
+            const timeoutRef = useRef(null);
+
+            // Define the special alerts and their IDs here so they are stable
+            const popupAlerts = [
+                { id: 'A04', severity: 'Critical', message: '🔋 Battery low at 20%. Save power — avoid using heavy appliances now.' },
+                { id: 'A05', severity: 'Info', message: '☀ Extra solar power available! Use fans, grinder, or pump now — no extra cost.' },
+                { id: 'A06', severity: 'Warning', message: '⚡ Meter #102 not responding. Please check wiring or reset device.' },
+                { id: 'A07', severity: 'Warning', message: '🪶 Solar output down 25%. Clean panels to restore full power.' },
+            ];
+            const popupAlertIds = ['A04', 'A05', 'A06', 'A07'];
+
+            // Cleanup timeout on unmount
+            useEffect(() => {
+                return () => clearTimeout(timeoutRef.current);
+            }, []);
+
+            const dismissAlert = (id) => {
+                setAlerts(alerts.filter(alert => alert.id !== id));
+            };
+
+            const triggerPopupAlerts = () => {
+                // Clear any pending alert from a previous click
+                clearTimeout(timeoutRef.current);
+
+                // Immediately remove any existing special alert from view
+                setAlerts(prevAlerts => prevAlerts.filter(a => !popupAlertIds.includes(a.id)));
+
+                // Get the specific alert for this click
+                const alertToShow = popupAlerts[popupAlertIndex];
+
+                // After a 15-second delay, show the new alert
+                timeoutRef.current = setTimeout(() => {
+                    setAlerts(prevAlerts => [alertToShow, ...prevAlerts]);
+                }, 15000); // 15-second delay
+
+                // Prepare the index for the next click, looping if necessary
+                setPopupAlertIndex(prevIndex => (prevIndex + 1) % popupAlerts.length);
+            };
+
+            const alertStyles = {
+                Critical: {
+                    bg: 'bg-red-100',
+                    text: 'text-red-800',
+                    icon: ICONS.alertCritical,
+                    iconColor: 'text-red-500'
+                },
+                Warning: {
+                    bg: 'bg-yellow-100',
+                    text: 'text-yellow-800',
+                    icon: ICONS.alertWarning,
+                    iconColor: 'text-yellow-500'
+                },
+                Info: {
+                    bg: 'bg-blue-100',
+                    text: 'text-blue-800',
+                    icon: ICONS.alertInfo,
+                    iconColor: 'text-blue-500'
+                },
+            };
+
+            return (
+                <div>
+                    <PageTitle>Dashboard</PageTitle>
+
+                    {/* Hidden button to trigger popup alerts */}
+                    <button 
+                        onClick={triggerPopupAlerts} 
+                        className="fixed bottom-4 right-4 w-12 h-12 bg-blue-600 text-white rounded-full z-50 focus:outline-none transition-transform hover:scale-110 shadow-lg flex items-center justify-center text-2xl font-bold"
+                        aria-label="Trigger special alerts"
+                    >
+                        @
+                    </button>
+
+                    {/* Alerts Section */}
+                    {alerts.length > 0 && (
+                        <div className="mb-6">
+                            <h2 className="text-xl font-bold text-gray-700 mb-3">System Alerts</h2>
+                            <div className="space-y-3">
+                                {alerts.map(alert => {
+                                    const styles = alertStyles[alert.severity] || {};
+                                    return (
+                                        <div key={alert.id} className={`${styles.bg} ${styles.text} rounded-lg p-4 flex items-center justify-between shadow-sm alert-enter-active`}>
+                                            <div className="flex items-center">
+                                                <div className={`mr-3 ${styles.iconColor}`}>{styles.icon}</div>
+                                                <span className="font-medium">{alert.message}</span>
+                                            </div>
+                                            <button onClick={() => dismissAlert(alert.id)} className={`text-xl leading-none ${styles.text} opacity-70 hover:opacity-100`}>&times;</button>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 mb-6">
+                        <StatCard icon={ICONS.sun} title="PV Generation" value={`${MOCK_DATA.overview.pvGeneration} kW`} />
+                        <StatCard icon={ICONS.battery} title="Battery SoC" value={`${MOCK_DATA.overview.batterySoC}%`} />
+                        <StatCard icon={ICONS.uptime} title="System Uptime" value={`${MOCK_DATA.overview.systemUptime}%`} />
+                        <StatCard icon={ICONS.fault} title="Fault Logs" value={MOCK_DATA.overview.faultLogs} />
+                    </div>
+                    <div className="grid lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2"><PVTrendChart /></div>
+                        <div><LoadChart /></div>
+                    </div>
                 </div>
-                <div className="grid lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2"><PVTrendChart /></div>
-                    <div><LoadChart /></div>
-                </div>
-            </div>
-        );
+            );
+        };
+
 
         const StatCard = ({ icon, title, value }) => (
             <Card className="flex items-center space-x-4">
@@ -337,7 +468,7 @@
                                     {tasks.map(t => (
                                         <tr key={t.id} className="border-b last:border-0">
                                             <td className="p-2">{t.task}</td>
-                                            <td className="p-2">{t.date}</td>
+                                            <td className="p-2">{formatDate(t.date)}</td>
                                             <td className="p-2">
                                                 <span className={`px-2 py-1 text-xs rounded-full ${t.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{t.status}</span>
                                             </td>
@@ -382,7 +513,7 @@
                                 <tbody>
                                     {transactions.map(t => (
                                         <tr key={t.id} className="border-b last:border-0">
-                                            <td className="p-2">{t.date}</td><td className="p-2">{t.household}</td><td className="p-2 font-semibold">₹{t.amount.toFixed(2)}</td>
+                                            <td className="p-2">{formatDate(t.date)}</td><td className="p-2">{t.household}</td><td className="p-2 font-semibold">₹{t.amount.toFixed(2)}</td>
                                             <td className="p-2"><span className={`text-xs px-2 py-1 rounded-full ${t.type === 'Manual' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>{t.type}</span></td>
                                         </tr>
                                     ))}
@@ -411,7 +542,7 @@
                                 <tbody>
                                     {complaints.map(c => (
                                         <tr key={c.id} className="border-b last:border-0">
-                                            <td className="p-2">{c.date}</td><td className="p-2">{c.household}</td><td className="p-2">{c.subject}</td>
+                                            <td className="p-2">{formatDate(c.date)}</td><td className="p-2">{c.household}</td><td className="p-2">{c.subject}</td>
                                             <td className="p-2"><span className={`px-2 py-1 text-xs rounded-full ${c.status === 'Resolved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{c.status}</span></td>
                                             <td className="p-2"><button onClick={() => toggleStatus(c.id)} className="text-blue-600 hover:underline text-sm">Toggle Status</button></td>
                                         </tr>
@@ -453,8 +584,8 @@
             
             return (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-                    <Card className="w-full max-w-sm text-center">
-                        <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-3xl leading-none">&times;</button>
+                    <Card className="w-full max-w-sm text-center relative">
+                        <button onClick={onClose} className="absolute top-2 right-4 text-gray-400 hover:text-gray-600 text-3xl leading-none">&times;</button>
                         {step === 'details' && (
                             <div>
                                 <h3 className="font-bold text-lg mb-4">Manual Recharge</h3>
@@ -547,4 +678,6 @@
     </script>
 </body>
 </html>
+
+
 
